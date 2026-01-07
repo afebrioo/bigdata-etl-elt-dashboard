@@ -1,0 +1,30 @@
+2026-01-06 14:39:31,526 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-06 14:39:32,049 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.523
+2026-01-06 20:54:16,948 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-06 20:54:17,088 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.14
+2026-01-06 21:29:39,982 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-06 21:29:40,125 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.143
+2026-01-06 21:29:58,128 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-06 21:29:58,259 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.131
+2026-01-06 21:30:36,647 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-06 21:30:36,781 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.134
+2026-01-06 21:35:40,456 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-06 21:35:40,592 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.136
+2026-01-08 00:38:04,739 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:38:04,919 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.18
+2026-01-08 00:39:11,680 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:39:11,822 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.142
+2026-01-08 00:39:16,405 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:39:16,522 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.118
+2026-01-08 00:39:44,343 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:39:44,461 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.118
+2026-01-08 00:40:18,571 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:40:18,713 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.142
+2026-01-08 00:41:31,475 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:41:31,598 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.123
+2026-01-08 00:41:54,462 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:41:54,585 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.123
+2026-01-08 00:42:33,878 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 00:42:33,999 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.122
+2026-01-08 01:39:42,062 | INFO | extract_etl_source1 | Start EXTRACT source1_local | file=C:\College\Big data\Bigdata\raw\100000_Sales_Records_Raw.csv
+2026-01-08 01:39:42,213 | INFO | extract_etl_source1 | EXTRACT summary | source=source1_local | file=100000_Sales_Records_Raw.csv | rows=100000 | cols=14 | size_mb=11.8 | exec_sec=0.15

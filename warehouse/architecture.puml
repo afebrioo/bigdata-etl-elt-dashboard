@@ -1,0 +1,61 @@
+@startuml
+skinparam architecture {
+    BackgroundColor white
+    ArrowColor #2C3E50
+    BorderColor #2C3E50
+}
+
+package "Data Sources" {
+    [Local CSV]
+    [Kaggle API]
+}
+
+package "Bronze Layer (Raw Storage)" #EAECEE {
+    folder "/raw" {
+        [Original CSVs]
+    }
+}
+
+package "Processing Pipelines" {
+    component "ETL (Python/Pandas)" as ETL #D6EAF8
+    component "ELT (MySQL/SQL)" as ELT #FADBD8
+}
+
+package "Silver Layer (Data Lake)" #D5F5E3 {
+    folder "/datalake" {
+        [etl_fact_sales.csv]
+        [elt_sales_standardized.csv]
+    }
+}
+
+database "Gold Layer (Warehouse)" #FCF3CF {
+    folder "dw_sales (ETL)" {
+        [Star Schema (Fact/Dims)]
+    }
+    folder "elt_sales_db (ELT)" {
+        [sales_raw]
+        [sales_clean]
+    }
+}
+
+node "Presentation" {
+    [Streamlit Dashboard]
+}
+
+' Flows
+[Local CSV] --> [/raw]
+[Kaggle API] --> [/raw]
+
+[/raw] --> ETL
+ETL --> [etl_fact_sales.csv]
+[etl_fact_sales.csv] --> [Star Schema (Fact/Dims)]
+
+[/raw] --> [sales_raw]
+[sales_raw] --> ELT
+ELT --> [sales_clean]
+[sales_clean] --+ [elt_sales_standardized.csv]
+
+[Star Schema (Fact/Dims)] --> [Streamlit Dashboard]
+[sales_clean] --> [Streamlit Dashboard]
+
+@enduml

@@ -1,0 +1,43 @@
+2026-01-06 14:39:40,386 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-06 14:39:48,883 | INFO | load_to_warehouse | LOAD completed successfully | exec_time_sec=8.498
+2026-01-06 20:54:21,755 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-06 20:54:33,071 | INFO | load_to_warehouse | LOAD completed successfully | exec_time_sec=11.317
+2026-01-06 21:30:01,917 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-06 21:30:40,239 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-06 21:35:44,885 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-06 21:35:53,385 | INFO | run_analytic_queries | [ANALYTIC] q1_total_revenue_all | rows=1 | exec_time_sec=0.388
+2026-01-06 21:35:55,282 | INFO | run_analytic_queries | [ANALYTIC] q2_total_revenue_per_year | rows=8 | exec_time_sec=1.895
+2026-01-06 21:35:56,313 | INFO | run_analytic_queries | [ANALYTIC] q3_top5_country_profit | rows=5 | exec_time_sec=1.03
+2026-01-06 21:35:56,716 | INFO | run_analytic_queries | [ANALYTIC] q4_units_sold_per_item | rows=12 | exec_time_sec=0.402
+2026-01-06 21:35:56,903 | INFO | run_analytic_queries | [ANALYTIC] q5_avg_margin_per_channel | rows=2 | exec_time_sec=0.186
+2026-01-06 21:35:58,162 | INFO | run_analytic_queries | [ANALYTIC] q6_revenue_per_region_year | rows=64 | exec_time_sec=1.257
+2026-01-06 21:35:58,206 | INFO | run_analytic_queries | [ANALYTIC] q7_top10_order_profit | rows=10 | exec_time_sec=0.044
+2026-01-06 21:35:59,223 | INFO | run_analytic_queries | [ANALYTIC] q8_avg_shipping_days_country | rows=185 | exec_time_sec=1.017
+2026-01-06 21:35:59,227 | INFO | load_to_warehouse | LOAD completed successfully | exec_time_sec=14.341
+2026-01-08 00:38:10,624 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 00:39:15,074 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 00:39:20,111 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 00:39:48,155 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 00:40:21,547 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 00:41:35,078 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 00:41:57,878 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 00:42:03,477 | INFO | run_analytic_queries | [ANALYTIC] q1_total_revenue_all | rows=1 | exec_time_sec=0.077
+2026-01-08 00:42:03,635 | INFO | run_analytic_queries | [ANALYTIC] q2_total_revenue_per_year | rows=8 | exec_time_sec=0.157
+2026-01-08 00:42:04,733 | INFO | run_analytic_queries | [ANALYTIC] q3_top5_country_profit | rows=5 | exec_time_sec=1.097
+2026-01-08 00:42:05,098 | INFO | run_analytic_queries | [ANALYTIC] q4_units_sold_per_item | rows=12 | exec_time_sec=0.365
+2026-01-08 00:42:05,274 | INFO | run_analytic_queries | [ANALYTIC] q5_avg_margin_per_channel | rows=2 | exec_time_sec=0.175
+2026-01-08 00:42:05,469 | INFO | run_analytic_queries | [ANALYTIC] q6_revenue_per_region_year | rows=64 | exec_time_sec=0.193
+2026-01-08 00:42:05,528 | INFO | run_analytic_queries | [ANALYTIC] q7_top10_order_profit | rows=10 | exec_time_sec=0.057
+2026-01-08 00:42:05,653 | INFO | run_analytic_queries | [ANALYTIC] q8_avg_shipping_days_country | rows=185 | exec_time_sec=0.124
+2026-01-08 00:42:05,655 | INFO | load_to_warehouse | LOAD completed successfully | exec_time_sec=7.777
+2026-01-08 00:42:38,595 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 01:39:46,088 | INFO | load_to_warehouse | Start LOAD to MySQL data warehouse
+2026-01-08 01:39:51,671 | INFO | run_analytic_queries | [ANALYTIC] q1_total_revenue_all | rows=1 | exec_time_sec=0.067
+2026-01-08 01:39:52,878 | INFO | run_analytic_queries | [ANALYTIC] q2_total_revenue_per_year | rows=8 | exec_time_sec=1.206
+2026-01-08 01:39:53,732 | INFO | run_analytic_queries | [ANALYTIC] q3_top5_country_profit | rows=5 | exec_time_sec=0.854
+2026-01-08 01:39:54,110 | INFO | run_analytic_queries | [ANALYTIC] q4_units_sold_per_item | rows=12 | exec_time_sec=0.378
+2026-01-08 01:39:54,285 | INFO | run_analytic_queries | [ANALYTIC] q5_avg_margin_per_channel | rows=2 | exec_time_sec=0.174
+2026-01-08 01:39:55,176 | INFO | run_analytic_queries | [ANALYTIC] q6_revenue_per_region_year | rows=64 | exec_time_sec=0.889
+2026-01-08 01:39:55,222 | INFO | run_analytic_queries | [ANALYTIC] q7_top10_order_profit | rows=10 | exec_time_sec=0.044
+2026-01-08 01:39:55,363 | INFO | run_analytic_queries | [ANALYTIC] q8_avg_shipping_days_country | rows=185 | exec_time_sec=0.14
+2026-01-08 01:39:55,363 | INFO | load_to_warehouse | LOAD completed successfully | exec_time_sec=9.275
