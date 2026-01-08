@@ -194,25 +194,47 @@ tab1, tab2 = st.tabs(["🔴 ELT View (Warehouse)", "🔵 ETL View (Star Schema)"
 
 def render_content(df, p_name):
     if df.empty:
-        st.warning(f"No data for {p_name} pipeline.")
+        st.warning(f"No data for {p_name} pipeline. Ensure filters are not too restrictive.")
         return
 
-    # 1. Definisi Warna di awal agar tidak UnboundLocalError
+    # 1. Tentukan warna di awal agar aman
     m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
 
-    # Column Mapping
+    # 2. Mapping Kolom - Definisikan SEMUA di sini sebelum dipakai
     rev = get_col(df, 'Total Revenue')
     prof = get_col(df, 'Total Profit')
-    # ... (lanjutkan sisa code mapping kamu)
+    units = get_col(df, 'Units Sold')
+    date_c = get_col(df, 'Order Date')
+    item_c = get_col(df, 'Item Type')
+    reg_c = get_col(df, 'Region')
+    chan_c = get_col(df, 'Sales Channel')
+    prio_c = get_col(df, 'Order Priority')
 
-    # 2. KPI UTAMA
-    # ... (code KPI kamu)
+    # Cek kolom kritikal
+    if not rev or not prof or not units:
+        st.error(f"Critical columns (Revenue/Profit/Units) for {p_name} not found.")
+        return
 
-    # 3. TREN WAKTU
+    # 3. KPI UTAMA
+    st.subheader("1. KPI Utama")
+    k1, k2, k3, k4 = st.columns(4)
+    t_rev = df[rev].sum()
+    t_prof = df[prof].sum()
+    t_units = df[units].sum()
+    k1.metric("Total Revenue", f"${t_rev:,.0f}")
+    k2.metric("Total Profit", f"${t_prof:,.0f}")
+    k3.metric("Units Sold", f"{t_units:,.0f}")
+    k4.metric("Profit Margin", f"{(t_prof/t_rev*100):.1f}%" if t_rev != 0 else "0%")
+
+    st.markdown("---")
+
+    # 4. TREN WAKTU
     st.subheader("2. Tren Waktu")
     if date_c:
+        # Pastikan kolom tanggal benar-benar datetime
+        df[date_c] = pd.to_datetime(df[date_c], errors='coerce')
         trend = df.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
-        # Hapus baris m_color di sini karena sudah dipindah ke atas
+        
         chart_trend = alt.Chart(trend).mark_area(
             color=m_color, opacity=0.4, line={'color': m_color}
         ).encode(
@@ -221,16 +243,20 @@ def render_content(df, p_name):
         ).properties(height=300)
         st.altair_chart(chart_trend, use_container_width=True)
 
-    # 4. DISTRIBUSI (Histogram)
-    # Sekarang m_color pasti terbaca di sini
-    st.write("**Profit Distribution (Histogram)**")
-    dist_chart = alt.Chart(df).mark_bar(color=m_color).encode(
-        alt.X(f"{prof}:Q", bin=True, title="Profit Bins"),
-        y='count()',
-    ).properties(height=300)
-    st.altair_chart(dist_chart, use_container_width=True)
+    st.markdown("---")
+
+    # 5. DISTRIBUSI & PERBANDINGAN
+    col_dist, col_comp = st.columns(2)
     
-    # ... (sisa code lainnya)
+    with col_dist:
+        st.subheader("3. Distribusi")
+        st.write("**Profit Distribution (Histogram)**")
+        dist_chart = alt.Chart(df).mark_bar(color=m_color).encode(
+            alt.X(f"{prof}:Q", bin=True, title="Profit Bins"),
+            y='count()',
+        ).properties(height=300)
+        st.altair_chart(dist_chart, use_container_width=True)
+        
 with tab1: render_content(f_df_elt, "ELT")
 with tab2: render_content(f_df_etl, "ETL")
 
