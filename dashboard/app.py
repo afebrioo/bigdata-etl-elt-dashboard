@@ -63,14 +63,30 @@ def load_etl_data():
         try:
             csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
             df = pd.read_csv(csv_path)
-            # Standarisasi kolom tanggal di ETL agar terbaca filter
+            
+            # --- TAMBAHKAN INI ---
+            # Cari kolom tanggal dan paksa jadi datetime agar Filter Global bekerja
             d_col = get_col(df, 'Order Date')
             if d_col:
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
             return df
         except Exception as e:
             st.error(f"ETL load error: {e}")
-            return pd.DataFrame()
+            return pd.DataFrame()# --- NORMALISASI KOLOM ETL (FORCE MATCHING) ---
+if not df_fact_raw.empty:
+    # Cari nama asli kolom di df_fact_raw dan ganti agar sesuai standar pencarian
+    mapping = {
+        get_col(df_fact_raw, 'Order Date'): 'Order Date',
+        get_col(df_fact_raw, 'Region'): 'Region',
+        get_col(df_fact_raw, 'Sales Channel'): 'Sales Channel',
+        get_col(df_fact_raw, 'Item Type'): 'Item Type'
+    }
+    # Hapus mapping yang None (jika kolom benar-benar tidak ada)
+    mapping = {k: v for k, v in mapping.items() if k is not None}
+    df_fact_raw = df_fact_raw.rename(columns=mapping)
+
+# Re-apply filters setelah normalisasi
+f_df_etl = apply_filters(df_fact_raw)
 
 # --- LOADING DATA ---
 df_elt_raw = load_elt_data()
@@ -180,6 +196,22 @@ def apply_filters(df):
 
 
 f_df_elt = apply_filters(df_elt_raw)
+f_df_etl = apply_filters(df_fact_raw)
+
+# --- NORMALISASI KOLOM ETL (FORCE MATCHING) ---
+if not df_fact_raw.empty:
+    # Cari nama asli kolom di df_fact_raw dan ganti agar sesuai standar pencarian
+    mapping = {
+        get_col(df_fact_raw, 'Order Date'): 'Order Date',
+        get_col(df_fact_raw, 'Region'): 'Region',
+        get_col(df_fact_raw, 'Sales Channel'): 'Sales Channel',
+        get_col(df_fact_raw, 'Item Type'): 'Item Type'
+    }
+    # Hapus mapping yang None (jika kolom benar-benar tidak ada)
+    mapping = {k: v for k, v in mapping.items() if k is not None}
+    df_fact_raw = df_fact_raw.rename(columns=mapping)
+
+# Re-apply filters setelah normalisasi
 f_df_etl = apply_filters(df_fact_raw)
 
 # --- MAIN UI ---
