@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine
 import altair as alt
+import os
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # --- PRE-CONFIG ---
 st.set_page_config(
     page_title="Big Data Pipelines Dashboard",
@@ -31,54 +33,53 @@ def get_engine(db_name='elt_sales_db'):
     return create_engine(f'mysql+pymysql://root:@localhost/{db_name}')
 
 @st.cache_data
+@st.cache_data
 def load_elt_data():
-    # 1️⃣ Coba DB (LOCAL)
+    # Coba DB dulu (untuk lokal)
     try:
         engine = get_engine('elt_sales_db')
         df = pd.read_sql("SELECT * FROM sales_processed", engine)
         return df
     except:
-        # 2️⃣ Fallback ke CSV (CLOUD)
+        # Fallback ke CSV (untuk Cloud/Deploy)
         try:
-            df = pd.read_csv("dashboard/data/sales_processed.csv")
+            # os.path.join memastikan slash (/) benar di Windows maupun Linux
+            csv_path = os.path.join(BASE_DIR, "data", "sales_processed.csv")
+            df = pd.read_csv(csv_path)
+            
             d_col = get_col(df, 'Order Date')
             if d_col:
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
             return df
         except Exception as e:
-            st.error(f"ELT load error (DB & CSV): {e}")
+            st.error(f"ELT load error: File tidak ditemukan di {csv_path}")
             return pd.DataFrame()
-
 
 @st.cache_data
 def load_etl_data():
-    engine = get_engine('dw_sales')
-    # Star Schema needs joins to get descriptors
-    query = """
-    SELECT 
-        f.*, 
-        d.order_date,
-        c.region, c.country,
-        i.item_type,
-        ch.sales_channel
-    FROM fact_sales f
-    LEFT JOIN dim_date d ON f.date_id = d.date_id
-    LEFT JOIN dim_country c ON f.country_id = c.country_id
-    LEFT JOIN dim_item i ON f.item_id = i.item_id
-    LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id
-    """
     try:
-        df = pd.read_sql(query, engine)
-        if 'order_date' in df.columns:
-            df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
-        return df
+        engine = get_engine('dw_sales')
+        query = """
+        SELECT f.*, d.order_date, c.region, c.country, i.item_type, ch.sales_channel
+        FROM fact_sales f
+        LEFT JOIN dim_date d ON f.date_id = d.date_id
+        LEFT JOIN dim_country c ON f.country_id = c.country_id
+        LEFT JOIN dim_item i ON f.item_id = i.item_id
+        LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id
+        """
+        return pd.read_sql(query, engine)
     except:
-        # Fallback to fact table only if joins fail
         try:
-            return pd.read_sql("SELECT * FROM fact_sales", engine)
-        except:
-            # Jika DB benar-benar mati, baru lari ke CSV
-            return pd.read_csv("dashboard/data/fact_sales.csv")
+            # Gunakan path dinamis ke folder dashboard/data/fact_sales.csv
+            csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
+            df = pd.read_csv(csv_path)
+            
+            if 'order_date' in df.columns:
+                df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+            return df
+        except Exception as e:
+            st.error(f"ETL load error: File tidak ditemukan di {csv_path}")
+            return pd.DataFrame()
 
 # --- LOADING DATA ---
 df_elt_raw = load_elt_data()
