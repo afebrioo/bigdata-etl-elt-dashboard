@@ -92,17 +92,22 @@ def load_etl_data():
             d_col = get_col(df, 'order_date')
             if d_col:
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
+            st.success("✅ ETL data loaded from fact_sales_joined.csv with full dimensions!")
             return df
-        except:
+        except Exception as joined_error:
             # Try original fact_sales.csv (without dimensions)
             try:
                 csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
                 df = pd.read_csv(csv_path)
                 st.warning("⚠️ ETL data loaded without dimension tables. Charts may be limited.")
-                st.info("💡 Export joined data as 'fact_sales_joined.csv' for full functionality.")
+                st.info(f"💡 Looking for: {os.path.join(BASE_DIR, 'data', 'fact_sales_joined.csv')}")
+                st.error(f"Debug - Joined file error: {joined_error}")
                 return df
             except Exception as csv_error:
-                st.warning(f"ETL data not found. DB: {db_error}, CSV: {csv_error}")
+                st.error(f"❌ No ETL data found!")
+                st.write(f"- Database error: {db_error}")
+                st.write(f"- Joined CSV error: {joined_error}")
+                st.write(f"- Basic CSV error: {csv_error}")
                 return pd.DataFrame()
 
 
