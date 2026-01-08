@@ -14,11 +14,8 @@ st.set_page_config(
 
 # --- HELPER: ROBUST COLUMN ACCESS ---
 def get_col(df, target_name):
-    """
-    Searches for a column name in a case-insensitive and space-insensitive way.
-    Example: 'Total Revenue' will match 'total_revenue', 'totalrevenue', 'Total Revenue', etc.
-    """
-    if df.empty: return None
+    if df is None or df.empty: return None
+    # Hapus spasi dan underscore untuk pencarian (misal: "Order Date" -> "orderdate")
     target_clean = target_name.lower().replace(" ", "").replace("_", "")
     for col in df.columns:
         col_clean = str(col).lower().replace(" ", "").replace("_", "")
@@ -58,20 +55,18 @@ def load_elt_data():
 @st.cache_data
 def load_etl_data():
     try:
-        # Coba koneksi database lokal
         engine = get_engine('dw_sales')
         query = "SELECT f.*, d.order_date, c.region, c.country, i.item_type, ch.sales_channel FROM fact_sales f LEFT JOIN dim_date d ON f.date_id = d.date_id LEFT JOIN dim_country c ON f.country_id = c.country_id LEFT JOIN dim_item i ON f.item_id = i.item_id LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id"
         df = pd.read_sql(query, engine)
-        if 'order_date' in df.columns:
-            df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
         return df
     except:
-        # Fallback ke CSV (untuk Deploy GitHub)
         try:
             csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
             df = pd.read_csv(csv_path)
-            if 'order_date' in df.columns:
-                df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+            # Standarisasi kolom tanggal di ETL agar terbaca filter
+            d_col = get_col(df, 'Order Date')
+            if d_col:
+                df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
             return df
         except Exception as e:
             st.error(f"ETL load error: {e}")
@@ -194,8 +189,13 @@ tab1, tab2 = st.tabs(["🔴 ELT View (Warehouse)", "🔵 ETL View (Star Schema)"
 
 def render_content(df, p_name):
     if df is None or df.empty:
-        st.warning(f"No data for {p_name} pipeline.")
+        st.warning(f"No data for {p_name} pipeline. Coba reset filter di sidebar.")
+        # Debugging singkat untuk melihat kolom apa yang ada
+        if df is not None:
+             st.write(f"Kolom yang terdeteksi: `{list(df.columns)}`")
         return
+    
+    # ... sisa kode render_content kamu ...
 
     m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
 
