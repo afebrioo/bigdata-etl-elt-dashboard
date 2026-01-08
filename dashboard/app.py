@@ -200,20 +200,29 @@ def render_content(df, p_name):
     # 1. Tentukan warna di awal agar aman
     m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
 
-    # 2. Mapping Kolom - Definisikan SEMUA di sini sebelum dipakai
-    rev = get_col(df, 'Total Revenue')
-    prof = get_col(df, 'Total Profit')
-    units = get_col(df, 'Units Sold')
-    date_c = get_col(df, 'Order Date')
-    item_c = get_col(df, 'Item Type')
-    reg_c = get_col(df, 'Region')
-    chan_c = get_col(df, 'Sales Channel')
-    prio_c = get_col(df, 'Order Priority')
-
-    # Cek kolom kritikal
-    if not rev or not prof or not units:
-        st.error(f"Critical columns (Revenue/Profit/Units) for {p_name} not found.")
-        return
+    # 2. TREN WAKTU
+    st.subheader("2. Tren Waktu")
+    if date_c:
+        # PENTING: Paksa kolom menjadi datetime sebelum melakukan grouping
+        df[date_c] = pd.to_datetime(df[date_c], errors='coerce')
+        
+        # Hapus data yang gagal diconvert (NaT) agar tidak error saat grouping
+        df_trend = df.dropna(subset=[date_c])
+        
+        if not df_trend.empty:
+            trend = df_trend.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
+            
+            chart_trend = alt.Chart(trend).mark_area(
+                color=m_color, opacity=0.4, line={'color': m_color}
+            ).encode(
+                x=alt.X(f'{date_c}:T', title="Month"), # :T artinya Temporal/Waktu
+                y=alt.Y(f'{prof}:Q', title="Monthly Profit"),
+                tooltip=[alt.Tooltip(f'{date_c}:T', format='%B %Y'), alt.Tooltip(f'{prof}:Q', format='$,.0f')]
+            ).properties(height=300)
+            
+            st.altair_chart(chart_trend, use_container_width=True)
+        else:
+            st.info("Data tanggal tidak ditemukan atau format tidak sesuai untuk grafik tren.")
 
     # 3. KPI UTAMA
     st.subheader("1. KPI Utama")
@@ -256,7 +265,7 @@ def render_content(df, p_name):
             y='count()',
         ).properties(height=300)
         st.altair_chart(dist_chart, use_container_width=True)
-        
+
 with tab1: render_content(f_df_elt, "ELT")
 with tab2: render_content(f_df_etl, "ETL")
 
