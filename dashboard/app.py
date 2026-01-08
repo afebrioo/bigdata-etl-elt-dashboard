@@ -193,43 +193,36 @@ st.markdown("Dashboard untuk Implementasi Pipeline Big Data ETL dan ELT pada Stu
 tab1, tab2 = st.tabs(["🔴 ELT View (Warehouse)", "🔵 ETL View (Star Schema)"])
 
 def render_content(df, p_name):
-    if df.empty:
+    if df is None or df.empty:
         st.warning(f"No data for {p_name} pipeline. Ensure filters are not too restrictive.")
         return
 
-    # 1. Tentukan warna di awal agar aman
+    # 1. Tentukan warna berdasarkan pipeline
     m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
 
-    # 2. TREN WAKTU
-    st.subheader("2. Tren Waktu")
-    if date_c:
-        # PENTING: Paksa kolom menjadi datetime sebelum melakukan grouping
-        df[date_c] = pd.to_datetime(df[date_c], errors='coerce')
-        
-        # Hapus data yang gagal diconvert (NaT) agar tidak error saat grouping
-        df_trend = df.dropna(subset=[date_c])
-        
-        if not df_trend.empty:
-            trend = df_trend.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
-            
-            chart_trend = alt.Chart(trend).mark_area(
-                color=m_color, opacity=0.4, line={'color': m_color}
-            ).encode(
-                x=alt.X(f'{date_c}:T', title="Month"), # :T artinya Temporal/Waktu
-                y=alt.Y(f'{prof}:Q', title="Monthly Profit"),
-                tooltip=[alt.Tooltip(f'{date_c}:T', format='%B %Y'), alt.Tooltip(f'{prof}:Q', format='$,.0f')]
-            ).properties(height=300)
-            
-            st.altair_chart(chart_trend, use_container_width=True)
-        else:
-            st.info("Data tanggal tidak ditemukan atau format tidak sesuai untuk grafik tren.")
+    # 2. Mapping Kolom
+    rev = get_col(df, 'Total Revenue')
+    prof = get_col(df, 'Total Profit')
+    units = get_col(df, 'Units Sold')
+    date_c = get_col(df, 'Order Date')
+    item_c = get_col(df, 'Item Type')
+    reg_c = get_col(df, 'Region')
+    chan_c = get_col(df, 'Sales Channel')
+    prio_c = get_col(df, 'Order Priority')
+
+    # Cek kolom kritikal
+    if not rev or not prof or not units:
+        st.error(f"Critical columns (Revenue/Profit/Units) for {p_name} not found.")
+        return
 
     # 3. KPI UTAMA
     st.subheader("1. KPI Utama")
     k1, k2, k3, k4 = st.columns(4)
-    t_rev = df[rev].sum()
-    t_prof = df[prof].sum()
-    t_units = df[units].sum()
+    # Gunakan fillna(0) agar perhitungan sum tidak error jika ada NaN
+    t_rev = df[rev].fillna(0).sum()
+    t_prof = df[prof].fillna(0).sum()
+    t_units = df[units].fillna(0).sum()
+    
     k1.metric("Total Revenue", f"${t_rev:,.0f}")
     k2.metric("Total Profit", f"${t_prof:,.0f}")
     k3.metric("Units Sold", f"{t_units:,.0f}")
@@ -240,17 +233,23 @@ def render_content(df, p_name):
     # 4. TREN WAKTU
     st.subheader("2. Tren Waktu")
     if date_c:
-        # Pastikan kolom tanggal benar-benar datetime
+        # Pastikan format tanggal benar dan hapus yang kosong (NaT)
         df[date_c] = pd.to_datetime(df[date_c], errors='coerce')
-        trend = df.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
+        df_trend = df.dropna(subset=[date_c, prof])
         
-        chart_trend = alt.Chart(trend).mark_area(
-            color=m_color, opacity=0.4, line={'color': m_color}
-        ).encode(
-            x=alt.X(f'{date_c}:T', title="Month"),
-            y=alt.Y(f'{prof}:Q', title="Monthly Profit")
-        ).properties(height=300)
-        st.altair_chart(chart_trend, use_container_width=True)
+        if not df_trend.empty:
+            trend = df_trend.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
+            
+            chart_trend = alt.Chart(trend).mark_area(
+                color=m_color, opacity=0.4, line={'color': m_color}
+            ).encode(
+                x=alt.X(f'{date_c}:T', title="Month"),
+                y=alt.Y(f'{prof}:Q', title="Monthly Profit"),
+                tooltip=[alt.Tooltip(f'{date_c}:T', title="Month"), alt.Tooltip(f'{prof}:Q', format="$,.0f")]
+            ).properties(height=300)
+            st.altair_chart(chart_trend, use_container_width=True)
+        else:
+            st.info("No valid date data available for Trend Chart.")
 
     st.markdown("---")
 
@@ -259,13 +258,56 @@ def render_content(df, p_name):
     
     with col_dist:
         st.subheader("3. Distribusi")
+        # Profit Distribution
         st.write("**Profit Distribution (Histogram)**")
         dist_chart = alt.Chart(df).mark_bar(color=m_color).encode(
-            alt.X(f"{prof}:Q", bin=True, title="Profit Bins"),
-            y='count()',
+            alt.X(f"{prof}:Q", bin=alt.Bin(maxbins=20), title="Profit Bins"),
+            y=alt.Y('count()', title="Number of Records"),
         ).properties(height=300)
         st.altair_chart(dist_chart, use_container_width=True)
+        
+        # Order Priority (Pie)
+        if prio_c:
+            st.write("**Order Priority**")
+            prio_data = df[prio_c].value_counts().reset_index()
+            prio_data.columns = ['Priority', 'Count']
+            chart_prio = alt.Chart(prio_data).mark_arc().encode(
+                theta='Count:Q',
+                color=alt.Color('Priority:N', scale=alt.Scale(scheme='category20')),
+                tooltip=['Priority', 'Count']
+            ).properties(height=300)
+            st.altair_chart(chart_prio, use_container_width=True)
 
+    with col_comp:
+        st.subheader("4. Perbandingan")
+        # Sales Channel Performance
+        if chan_c:
+            st.write("**Performance by Sales Channel**")
+            chan_data = df.groupby(chan_c)[prof].sum().reset_index()
+            chart_chan = alt.Chart(chan_data).mark_bar().encode(
+                x=alt.X(f'{chan_c}:N', title="Channel", axis=alt.Axis(labelAngle=0)),
+                y=alt.Y(f'{prof}:Q', title="Total Profit"),
+                color=alt.Color(f'{chan_c}:N', legend=None),
+                tooltip=[chan_c, alt.Tooltip(f'{prof}:Q', format="$,.0f")]
+            ).properties(height=300)
+            st.altair_chart(chart_chan, use_container_width=True)
+            
+        # Regional Comparison
+        if reg_c:
+            st.write("**Profit by Region**")
+            reg_data = df.groupby(reg_c)[prof].sum().reset_index()
+            chart_reg = alt.Chart(reg_data).mark_bar().encode(
+                x=alt.X(f'{prof}:Q', title="Total Profit"),
+                y=alt.Y(f'{reg_c}:N', sort='-x', title="Region"),
+                color=alt.Color(f'{reg_c}:N', legend=None),
+                tooltip=[reg_c, alt.Tooltip(f'{prof}:Q', format="$,.0f")]
+            ).properties(height=300)
+            st.altair_chart(chart_reg, use_container_width=True)
+
+    # 6. EXPLORER
+    with st.expander("📄 Raw Data Preview (Top 100)"):
+        st.dataframe(df.head(100), use_container_width=True)
+        
 with tab1: render_content(f_df_elt, "ELT")
 with tab2: render_content(f_df_etl, "ETL")
 
