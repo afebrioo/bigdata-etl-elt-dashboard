@@ -40,7 +40,7 @@ def load_elt_data():
     except:
         # 2️⃣ Fallback ke CSV (CLOUD)
         try:
-            df = pd.read_csv("data/sales_processed.csv")
+            df = pd.read_csv("dashboard/data/sales_processed.csv")
             d_col = get_col(df, 'Order Date')
             if d_col:
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
@@ -77,7 +77,8 @@ def load_etl_data():
         try:
             return pd.read_sql("SELECT * FROM fact_sales", engine)
         except:
-            return pd.DataFrame()
+            # Jika DB benar-benar mati, baru lari ke CSV
+            return pd.read_csv("dashboard/data/fact_sales.csv")
 
 # --- LOADING DATA ---
 df_elt_raw = load_elt_data()
