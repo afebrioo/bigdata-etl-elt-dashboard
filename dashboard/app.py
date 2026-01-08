@@ -32,18 +32,18 @@ def get_col(df, target_name):
 def get_engine(db_name='elt_sales_db'):
     return create_engine(f'mysql+pymysql://root:@localhost/{db_name}')
 
-@st.cache_data
+
 @st.cache_data
 def load_elt_data():
-    # Coba DB dulu (untuk lokal)
     try:
+        # Coba koneksi database lokal
         engine = get_engine('elt_sales_db')
         df = pd.read_sql("SELECT * FROM sales_processed", engine)
         return df
     except:
-        # Fallback ke CSV (untuk Cloud/Deploy)
+        # Fallback ke CSV (untuk Deploy GitHub)
         try:
-            # os.path.join memastikan slash (/) benar di Windows maupun Linux
+            # Menggabungkan path folder app.py dengan subfolder data
             csv_path = os.path.join(BASE_DIR, "data", "sales_processed.csv")
             df = pd.read_csv(csv_path)
             
@@ -52,33 +52,29 @@ def load_elt_data():
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
             return df
         except Exception as e:
-            st.error(f"ELT load error: File tidak ditemukan di {csv_path}")
+            st.error(f"ELT load error: {e}")
             return pd.DataFrame()
 
 @st.cache_data
 def load_etl_data():
     try:
+        # Coba koneksi database lokal
         engine = get_engine('dw_sales')
-        query = """
-        SELECT f.*, d.order_date, c.region, c.country, i.item_type, ch.sales_channel
-        FROM fact_sales f
-        LEFT JOIN dim_date d ON f.date_id = d.date_id
-        LEFT JOIN dim_country c ON f.country_id = c.country_id
-        LEFT JOIN dim_item i ON f.item_id = i.item_id
-        LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id
-        """
-        return pd.read_sql(query, engine)
+        query = "SELECT f.*, d.order_date, c.region, c.country, i.item_type, ch.sales_channel FROM fact_sales f LEFT JOIN dim_date d ON f.date_id = d.date_id LEFT JOIN dim_country c ON f.country_id = c.country_id LEFT JOIN dim_item i ON f.item_id = i.item_id LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id"
+        df = pd.read_sql(query, engine)
+        if 'order_date' in df.columns:
+            df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+        return df
     except:
+        # Fallback ke CSV (untuk Deploy GitHub)
         try:
-            # Gunakan path dinamis ke folder dashboard/data/fact_sales.csv
             csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
             df = pd.read_csv(csv_path)
-            
             if 'order_date' in df.columns:
                 df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
             return df
         except Exception as e:
-            st.error(f"ETL load error: File tidak ditemukan di {csv_path}")
+            st.error(f"ETL load error: {e}")
             return pd.DataFrame()
 
 # --- LOADING DATA ---
