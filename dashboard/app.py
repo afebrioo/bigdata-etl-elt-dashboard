@@ -89,25 +89,73 @@ def load_etl_data():
         try:
             csv_path = os.path.join(BASE_DIR, "data", "fact_sales_joined.csv")
             df = pd.read_csv(csv_path)
+            # Verify it has data
+            if df.empty or len(df.columns) == 0:
+                raise ValueError("Joined CSV is empty")
             d_col = get_col(df, 'order_date')
             if d_col:
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
-            st.success("✅ ETL data loaded from fact_sales_joined.csv with full dimensions!")
+            st.success("✅ ETL data loaded from fact_sales_joined.csv")
             return df
         except Exception as joined_error:
-            # Try original fact_sales.csv (without dimensions)
+            # ALTERNATIVE: Try to manually join dimension tables from separate CSVs
             try:
-                csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
-                df = pd.read_csv(csv_path)
-                st.warning("⚠️ ETL data loaded without dimension tables. Charts may be limited.")
-                st.info(f"💡 Looking for: {os.path.join(BASE_DIR, 'data', 'fact_sales_joined.csv')}")
-                st.error(f"Debug - Joined file error: {joined_error}")
-                return df
+                fact_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
+                df_fact = pd.read_csv(fact_path)
+                
+                # Try loading dimension tables if they exist
+                dim_tables = {}
+                for dim_name, dim_file in [
+                    ('date', 'dim_date.csv'),
+                    ('country', 'dim_country.csv'),
+                    ('item', 'dim_item.csv'),
+                    ('channel', 'dim_channel.csv')
+                ]:
+                    try:
+                        dim_path = os.path.join(BASE_DIR, "data", dim_file)
+                        dim_tables[dim_name] = pd.read_csv(dim_path)
+                    except:
+                        pass
+                
+                # Perform joins if dimension tables are available
+                if dim_tables:
+                    if 'date' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['date'][['date_id', 'order_date']], 
+                            on='date_id', how='left'
+                        )
+                    if 'country' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['country'][['country_id', 'region', 'country']], 
+                            on='country_id', how='left'
+                        )
+                    if 'item' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['item'][['item_id', 'item_type']], 
+                            on='item_id', how='left'
+                        )
+                    if 'channel' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['channel'][['channel_id', 'sales_channel']], 
+                            on='channel_id', how='left'
+                        )
+                    st.info("✅ ETL data joined from separate dimension tables")
+                    d_col = get_col(df_fact, 'order_date')
+                    if d_col:
+                        df_fact[d_col] = pd.to_datetime(df_fact[d_col], errors='coerce')
+                    return df_fact
+                else:
+                    # No dimension tables available
+                    st.warning("⚠️ ETL data loaded without dimensions. Charts will be limited.")
+                    st.info("💡 To fix: Export joined data or add dimension CSV files (dim_date.csv, dim_country.csv, etc.)")
+                    return df_fact
+                    
             except Exception as csv_error:
                 st.error(f"❌ No ETL data found!")
-                st.write(f"- Database error: {db_error}")
-                st.write(f"- Joined CSV error: {joined_error}")
-                st.write(f"- Basic CSV error: {csv_error}")
+                st.write("Tried:")
+                st.write(f"- Database: {str(db_error)[:100]}")
+                st.write(f"- Joined CSV: {str(joined_error)[:100]}")
+                st.write(f"- Fact CSV: {str(csv_error)[:100]}")
                 return pd.DataFrame()
 
 
