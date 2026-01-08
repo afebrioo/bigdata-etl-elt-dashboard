@@ -194,41 +194,25 @@ tab1, tab2 = st.tabs(["🔴 ELT View (Warehouse)", "🔵 ETL View (Star Schema)"
 
 def render_content(df, p_name):
     if df.empty:
-        st.warning(f"No data for {p_name} pipeline. Ensure filters are not too restrictive.")
+        st.warning(f"No data for {p_name} pipeline.")
         return
+
+    # 1. Definisi Warna di awal agar tidak UnboundLocalError
+    m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
 
     # Column Mapping
     rev = get_col(df, 'Total Revenue')
     prof = get_col(df, 'Total Profit')
-    units = get_col(df, 'Units Sold')
-    date_c = get_col(df, 'Order Date')
-    item_c = get_col(df, 'Item Type')
-    reg_c = get_col(df, 'Region')
-    chan_c = get_col(df, 'Sales Channel')
-    prio_c = get_col(df, 'Order Priority')
+    # ... (lanjutkan sisa code mapping kamu)
 
-    if not rev or not prof or not units:
-        st.error(f"Critical columns for {p_name} viz not found.")
-        return
+    # 2. KPI UTAMA
+    # ... (code KPI kamu)
 
-    # 1. KPI UTAMA
-    st.subheader("1. KPI Utama")
-    k1, k2, k3, k4 = st.columns(4)
-    t_rev = df[rev].sum()
-    t_prof = df[prof].sum()
-    t_units = df[units].sum()
-    k1.metric("Total Revenue", f"${t_rev:,.0f}")
-    k2.metric("Total Profit", f"${t_prof:,.0f}")
-    k3.metric("Units Sold", f"{t_units:,.0f}")
-    k4.metric("Profit Margin", f"{(t_prof/t_rev*100):.1f}%" if t_rev != 0 else "0%")
-
-    st.markdown("---")
-
-    # 2. TREN WAKTU
+    # 3. TREN WAKTU
     st.subheader("2. Tren Waktu")
     if date_c:
         trend = df.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
-        m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
+        # Hapus baris m_color di sini karena sudah dipindah ke atas
         chart_trend = alt.Chart(trend).mark_area(
             color=m_color, opacity=0.4, line={'color': m_color}
         ).encode(
@@ -237,64 +221,16 @@ def render_content(df, p_name):
         ).properties(height=300)
         st.altair_chart(chart_trend, use_container_width=True)
 
-    st.markdown("---")
-
-    # 3. DISTRIBUSI & 4. PERBANDINGAN
-    col_dist, col_comp = st.columns(2)
+    # 4. DISTRIBUSI (Histogram)
+    # Sekarang m_color pasti terbaca di sini
+    st.write("**Profit Distribution (Histogram)**")
+    dist_chart = alt.Chart(df).mark_bar(color=m_color).encode(
+        alt.X(f"{prof}:Q", bin=True, title="Profit Bins"),
+        y='count()',
+    ).properties(height=300)
+    st.altair_chart(dist_chart, use_container_width=True)
     
-    with col_dist:
-        st.subheader("3. Distribusi")
-        # Profit Distribution (Histogram)
-        st.write("**Profit Distribution (Histogram)**")
-        dist_chart = alt.Chart(df).mark_bar(color=m_color).encode(
-            alt.X(f"{prof}:Q", bin=True, title="Profit Bins"),
-            y='count()',
-        ).properties(height=300)
-        st.altair_chart(dist_chart, use_container_width=True)
-        
-        # Order Priority (Pie)
-        if prio_c:
-            st.write("**Order Priority (Pie)**")
-            prio_data = df[prio_c].value_counts().reset_index()
-            prio_data.columns = ['Priority', 'Count']
-            chart_prio = alt.Chart(prio_data).mark_arc().encode(
-                theta=alt.Theta(field="Count", type="quantitative"),
-                color=alt.Color(field="Priority", type="nominal"),
-                tooltip=['Priority', 'Count']
-            ).properties(height=300)
-            st.altair_chart(chart_prio, use_container_width=True)
-
-    with col_comp:
-        st.subheader("4. Perbandingan")
-        # Sales Channel Performance
-        if chan_c:
-            st.write("**Online vs Offline Performance**")
-            chan_data = df.groupby(chan_c)[prof].sum().reset_index()
-            chart_chan = alt.Chart(chan_data).mark_bar().encode(
-                x=alt.X(f'{chan_c}:N', title="Sales Channel"),
-                y=alt.Y(f'{prof}:Q', title="Total Profit"),
-                color=alt.Color(f'{chan_c}:N', legend=None),
-                tooltip=[chan_c, prof]
-            ).properties(height=300)
-            st.altair_chart(chart_chan, use_container_width=True)
-            
-        # Regional Comparison
-        if reg_c:
-            st.write("**Regional Profit Contribution**")
-            reg_data = df.groupby(reg_c)[prof].sum().reset_index()
-            chart_reg = alt.Chart(reg_data).mark_bar().encode(
-                x=alt.X(f'{prof}:Q', title="Revenue"),
-                y=alt.Y(f'{reg_c}:N', sort='-x', title="Region"),
-                color=alt.Color(f'{reg_c}:N', legend=None),
-                tooltip=[reg_c, prof]
-            ).properties(height=300)
-            st.altair_chart(chart_reg, use_container_width=True)
-
-    # 5. EXPLORER
-    with st.expander("📄 Data Explorer & Raw Records"):
-        st.write(f"Showing top 100 rows filtered for {p_name} pipeline.")
-        st.dataframe(df.head(100), use_container_width=True)
-
+    # ... (sisa code lainnya)
 with tab1: render_content(f_df_elt, "ELT")
 with tab2: render_content(f_df_etl, "ETL")
 
