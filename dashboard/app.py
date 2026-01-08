@@ -65,7 +65,14 @@ def load_etl_data():
         # Try database with JOIN query
         engine = get_engine('dw_sales')
         query = """
-        SELECT f.*, d.order_date, c.region, c.country, i.item_type, ch.sales_channel 
+        SELECT 
+            f.sales_id, f.order_id, f.units_sold, f.unit_price, f.unit_cost,
+            f.total_revenue, f.total_cost, f.total_profit, 
+            f.profit_per_unit, f.revenue_per_unit, f.profit_margin_ratio,
+            d.order_date, 
+            c.region, c.country, 
+            i.item_type, 
+            ch.sales_channel
         FROM fact_sales f 
         LEFT JOIN dim_date d ON f.date_id = d.date_id 
         LEFT JOIN dim_country c ON f.country_id = c.country_id 
@@ -73,22 +80,30 @@ def load_etl_data():
         LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id
         """
         df = pd.read_sql(query, engine)
-        d_col = get_col(df, 'Order Date')
+        d_col = get_col(df, 'order_date')
         if d_col:
             df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
         return df
     except Exception as db_error:
-        # Fallback to CSV
+        # Fallback to CSV - try joined version first
         try:
-            csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
+            csv_path = os.path.join(BASE_DIR, "data", "fact_sales_joined.csv")
             df = pd.read_csv(csv_path)
-            d_col = get_col(df, 'Order Date')
+            d_col = get_col(df, 'order_date')
             if d_col:
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
             return df
-        except Exception as csv_error:
-            st.warning(f"ETL data not found. DB Error: {db_error}. CSV Error: {csv_error}")
-            return pd.DataFrame()
+        except:
+            # Try original fact_sales.csv (without dimensions)
+            try:
+                csv_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
+                df = pd.read_csv(csv_path)
+                st.warning("⚠️ ETL data loaded without dimension tables. Charts may be limited.")
+                st.info("💡 Export joined data as 'fact_sales_joined.csv' for full functionality.")
+                return df
+            except Exception as csv_error:
+                st.warning(f"ETL data not found. DB: {db_error}, CSV: {csv_error}")
+                return pd.DataFrame()
 
 
 # --- LOAD DATA ---
@@ -241,28 +256,24 @@ def render_content(df, pipeline_name):
 
     main_color = "#FF4B4B" if pipeline_name == "ELT" else "#0083B0"
 
-    # === DEBUGGING: Show actual columns ===
-    with st.expander("🔍 Debug: View Available Columns"):
-        st.write("**Columns in your CSV:**")
-        st.code(", ".join(df.columns.tolist()))
-        st.write("**Column data types:**")
-        st.write(df.dtypes)
-
-    # Map columns - try multiple variations
-    rev_col = get_col(df, 'Total Revenue') or get_col(df, 'Revenue') or get_col(df, 'total_revenue')
-    prof_col = get_col(df, 'Total Profit') or get_col(df, 'Profit') or get_col(df, 'total_profit')
-    units_col = get_col(df, 'Units Sold') or get_col(df, 'Units') or get_col(df, 'units_sold') or get_col(df, 'Quantity')
-    date_col = get_col(df, 'Order Date') or get_col(df, 'Date') or get_col(df, 'order_date')
-    reg_col = get_col(df, 'Region') or get_col(df, 'region')
-    chan_col = get_col(df, 'Sales Channel') or get_col(df, 'Channel') or get_col(df, 'sales_channel')
+    # Map columns to exact CSV structure
+    # Your CSV uses lowercase with underscores
+    rev_col = get_col(df, 'total_revenue')
+    prof_col = get_col(df, 'total_profit')
+    units_col = get_col(df, 'units_sold')
+    date_col = get_col(df, 'order_date') or get_col(df, 'date_id')
+    reg_col = get_col(df, 'region')
+    chan_col = get_col(df, 'sales_channel') or get_col(df, 'channel_id')
+    country_col = get_col(df, 'country')
+    item_col = get_col(df, 'item_type')
 
     # Check critical columns
     if not rev_col or not prof_col or not units_col:
         st.error(f"❌ Critical columns missing!")
-        st.write("**Looking for:** Total Revenue, Total Profit, Units Sold")
+        st.write(f"**Looking for:** total_revenue, total_profit, units_sold")
         st.write(f"**Found:** Revenue={rev_col}, Profit={prof_col}, Units={units_col}")
-        st.write("**Available columns:**")
-        st.code(", ".join(df.columns.tolist()))
+        with st.expander("🔍 Debug: Available Columns"):
+            st.code(", ".join(df.columns.tolist()))
         return
 
     # === 1. KPI METRICS ===
@@ -283,7 +294,7 @@ def render_content(df, pipeline_name):
 
     # === 2. TIME TREND ===
     st.subheader("📅 Profit Trend Over Time")
-    if date_col:
+    if date_col and date_col in df.columns:
         df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
         df_trend = df.dropna(subset=[date_col, prof_col])
         
@@ -307,7 +318,8 @@ def render_content(df, pipeline_name):
         else:
             st.info("No valid date data available for trend analysis.")
     else:
-        st.warning("Date column not found in dataset.")
+        st.warning("⚠️ Date column not found. For ETL data, export with JOIN to include 'order_date'.")
+        st.code("SELECT f.*, d.order_date FROM fact_sales f LEFT JOIN dim_date d ON f.date_id = d.date_id")
 
     st.markdown("---")
 
@@ -325,7 +337,7 @@ def render_content(df, pipeline_name):
 
     with col_right:
         st.subheader("🛒 Sales Channel Performance")
-        if chan_col:
+        if chan_col and chan_col in df.columns:
             channel_data = df.groupby(chan_col)[prof_col].sum().reset_index()
             
             channel_chart = alt.Chart(channel_data).mark_bar().encode(
@@ -340,11 +352,11 @@ def render_content(df, pipeline_name):
             
             st.altair_chart(channel_chart, use_container_width=True)
         else:
-            st.info("Sales Channel column not available.")
+            st.warning("⚠️ Sales Channel not available. For ETL, export with JOIN to include 'sales_channel'.")
 
     # === 4. REGIONAL ANALYSIS ===
     st.subheader("🌍 Regional Performance")
-    if reg_col:
+    if reg_col and reg_col in df.columns:
         region_data = df.groupby(reg_col)[prof_col].sum().reset_index().sort_values(prof_col, ascending=False)
         
         region_chart = alt.Chart(region_data).mark_bar().encode(
@@ -359,7 +371,7 @@ def render_content(df, pipeline_name):
         
         st.altair_chart(region_chart, use_container_width=True)
     else:
-        st.info("Region column not available.")
+        st.warning("⚠️ Region not available. For ETL, export with JOIN to include 'region'.")
 
     # === 5. DATA EXPLORER ===
     with st.expander("📄 View Raw Data (Top 100 Rows)"):
