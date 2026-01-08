@@ -194,13 +194,12 @@ tab1, tab2 = st.tabs(["🔴 ELT View (Warehouse)", "🔵 ETL View (Star Schema)"
 
 def render_content(df, p_name):
     if df is None or df.empty:
-        st.warning(f"No data for {p_name} pipeline. Ensure filters are not too restrictive.")
+        st.warning(f"No data for {p_name} pipeline.")
         return
 
-    # 1. Warna & Inisialisasi
     m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
 
-    # 2. Mapping Kolom
+    # 1. Mapping Kolom dengan Debugging
     rev = get_col(df, 'Total Revenue')
     prof = get_col(df, 'Total Profit')
     units = get_col(df, 'Units Sold')
@@ -209,11 +208,12 @@ def render_content(df, p_name):
     chan_c = get_col(df, 'Sales Channel')
     prio_c = get_col(df, 'Order Priority')
 
+    # Cek kolom kritikal
     if not rev or not prof or not units:
-        st.error(f"Critical columns for {p_name} not found.")
+        st.error(f"Kolom Utama Tidak Ditemukan! Kolom tersedia: {list(df.columns)}")
         return
 
-    # 3. KPI UTAMA
+    # 2. KPI UTAMA
     st.subheader("1. KPI Utama")
     k1, k2, k3, k4 = st.columns(4)
     t_rev = df[rev].fillna(0).sum()
@@ -226,15 +226,15 @@ def render_content(df, p_name):
 
     st.markdown("---")
 
-    # 4. TREN WAKTU (FIX)
+    # 3. TREN WAKTU (FIX LOGIC)
     st.subheader("2. Tren Waktu")
     if date_c:
-        # Konversi tanggal dan hapus data kosong agar grafik muncul
+        # Konversi paksa ke datetime
         df[date_c] = pd.to_datetime(df[date_c], errors='coerce')
+        # Hapus baris yang tanggalnya NaT atau profitnya NaN
         df_trend = df.dropna(subset=[date_c, prof])
         
         if not df_trend.empty:
-            # Grouping per bulan
             trend = df_trend.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
             chart_trend = alt.Chart(trend).mark_area(
                 color=m_color, opacity=0.4, line={'color': m_color}
@@ -245,11 +245,13 @@ def render_content(df, p_name):
             ).properties(height=300)
             st.altair_chart(chart_trend, use_container_width=True)
         else:
-            st.info("Format tanggal tidak valid atau data tanggal kosong.")
+            st.info(f"Kolom '{date_c}' ditemukan, tapi datanya kosong atau formatnya salah.")
+    else:
+        st.warning("Grafik Tren: Kolom 'Order Date' tidak terdeteksi.")
 
     st.markdown("---")
 
-    # 5. DISTRIBUSI & PERBANDINGAN (FIX)
+    # 4. DISTRIBUSI & PERBANDINGAN
     col_dist, col_comp = st.columns(2)
     
     with col_dist:
@@ -274,6 +276,8 @@ def render_content(df, p_name):
                 tooltip=[chan_c, alt.Tooltip(f'{prof}:Q', format="$,.0f")]
             ).properties(height=300)
             st.altair_chart(chart_chan, use_container_width=True)
+        else:
+            st.info("Kolom 'Sales Channel' tidak ditemukan.")
             
         # Perbandingan Region
         if reg_c:
@@ -286,9 +290,11 @@ def render_content(df, p_name):
                 tooltip=[reg_c, alt.Tooltip(f'{prof}:Q', format="$,.0f")]
             ).properties(height=300)
             st.altair_chart(chart_reg, use_container_width=True)
+        else:
+            st.info("Kolom 'Region' tidak ditemukan.")
 
-    # 6. EXPLORER
-    with st.expander("📄 Raw Data Preview"):
+    # 5. DATA EXPLORER
+    with st.expander("📄 Raw Data Preview (Top 100)"):
         st.dataframe(df.head(100), use_container_width=True)
         
 with tab1: render_content(f_df_elt, "ELT")
