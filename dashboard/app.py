@@ -10,6 +10,21 @@ st.set_page_config(
     layout="wide",
 )
 
+# --- HELPER: ROBUST COLUMN ACCESS ---
+def get_col(df, target_name):
+    """
+    Searches for a column name in a case-insensitive and space-insensitive way.
+    Example: 'Total Revenue' will match 'total_revenue', 'totalrevenue', 'Total Revenue', etc.
+    """
+    if df.empty: return None
+    target_clean = target_name.lower().replace(" ", "").replace("_", "")
+    for col in df.columns:
+        col_clean = str(col).lower().replace(" ", "").replace("_", "")
+        if col_clean == target_clean:
+            return col
+    return None
+
+
 # --- DATABASE CONNECTION ---
 @st.cache_resource
 def get_engine(db_name='elt_sales_db'):
@@ -17,15 +32,22 @@ def get_engine(db_name='elt_sales_db'):
 
 @st.cache_data
 def load_elt_data():
-    engine = get_engine('elt_sales_db')
+    # 1️⃣ Coba DB (LOCAL)
     try:
-        df = pd.read_sql("SELECT * FROM raw_sales_api", engine)
-        if 'Order Date' in df.columns:
-            df['Order Date'] = pd.to_datetime(df['Order Date'], errors='coerce')
+        engine = get_engine('elt_sales_db')
+        df = pd.read_sql("SELECT * FROM sales_processed", engine)
         return df
-    except Exception as e:
-        st.error(f"ELT load error: {e}")
-        return pd.DataFrame()
+    except:
+        # 2️⃣ Fallback ke CSV (CLOUD)
+        try:
+            df = pd.read_csv("data/sales_processed.csv")
+            d_col = get_col(df, 'Order Date')
+            if d_col:
+                df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
+            return df
+        except Exception as e:
+            st.error(f"ELT load error (DB & CSV): {e}")
+            return pd.DataFrame()
 
 
 @st.cache_data
@@ -57,20 +79,6 @@ def load_etl_data():
         except:
             return pd.DataFrame()
 
-# --- HELPER: ROBUST COLUMN ACCESS ---
-def get_col(df, target_name):
-    """
-    Searches for a column name in a case-insensitive and space-insensitive way.
-    Example: 'Total Revenue' will match 'total_revenue', 'totalrevenue', 'Total Revenue', etc.
-    """
-    if df.empty: return None
-    target_clean = target_name.lower().replace(" ", "").replace("_", "")
-    for col in df.columns:
-        col_clean = str(col).lower().replace(" ", "").replace("_", "")
-        if col_clean == target_clean:
-            return col
-    return None
-
 # --- LOADING DATA ---
 df_elt_raw = load_elt_data()
 df_fact_raw = load_etl_data()
@@ -80,61 +88,103 @@ if df_elt_raw.empty and df_fact_raw.empty:
     st.stop()
 
 # --- SIDEBAR: GLOBAL FILTERS ---
+# --- SIDEBAR: GLOBAL FILTERS ---
 st.sidebar.header("🔍 Global Filters")
 
-# Consolidate filter options
+# ===== DATE FILTER =====
 all_dates = []
 for d_df in [df_elt_raw, df_fact_raw]:
-    if not d_df.empty:
+    if d_df is not None and not d_df.empty:
         dc = get_col(d_df, 'Order Date')
         if dc:
-            valid_dates = pd.to_datetime(d_df[dc]).dropna().tolist()
-            all_dates.extend(valid_dates)
+            all_dates.extend(pd.to_datetime(d_df[dc], errors='coerce').dropna().tolist())
 
 if all_dates:
-    all_dates = pd.to_datetime(all_dates)
-    min_date, max_date = all_dates.min(), all_dates.max()
-    selected_range = st.sidebar.date_input("Select Date Horizon", [min_date.date(), max_date.date()])
+    min_date, max_date = min(all_dates), max(all_dates)
+    selected_range = st.sidebar.date_input(
+        "Select Date Horizon",
+        [min_date.date(), max_date.date()]
+    )
 else:
     selected_range = [None, None]
 
-# Regions
-all_reg = sorted([str(x) for x in df_elt_raw['Region'].dropna().unique()]) if 'Region' in df_elt_raw.columns else []
-if not all_reg and 'region' in df_fact_raw.columns:
-    all_reg = sorted([str(x) for x in df_fact_raw['region'].dropna().unique()])
-selected_regions = st.sidebar.multiselect("Select Regions", options=all_reg, default=all_reg)
+# ===== REGION FILTER =====
+r_col_elt = get_col(df_elt_raw, 'Region')
+r_col_etl = get_col(df_fact_raw, 'Region')
 
-# Items
-all_items = sorted([str(x) for x in df_elt_raw['Item Type'].dropna().unique()]) if 'Item Type' in df_elt_raw.columns else []
-if not all_items and 'item_type' in df_fact_raw.columns:
-    all_items = sorted([str(x) for x in df_fact_raw['item_type'].dropna().unique()])
-selected_items = st.sidebar.multiselect("Select Item Types", options=all_items, default=all_items)
+if r_col_elt:
+    all_regions = sorted(df_elt_raw[r_col_elt].dropna().astype(str).unique())
+elif r_col_etl:
+    all_regions = sorted(df_fact_raw[r_col_etl].dropna().astype(str).unique())
+else:
+    all_regions = []
 
-# Channels
-all_chan = sorted([str(x) for x in df_elt_raw['Sales Channel'].dropna().unique()]) if 'Sales Channel' in df_elt_raw.columns else []
-if not all_chan and 'sales_channel' in df_fact_raw.columns:
-    all_chan = sorted([str(x) for x in df_fact_raw['sales_channel'].dropna().unique()])
-selected_channels = st.sidebar.multiselect("Sales Channel", options=all_chan, default=all_chan)
+selected_regions = st.sidebar.multiselect(
+    "Select Regions", options=all_regions, default=all_regions
+)
+
+# ===== ITEM TYPE FILTER =====
+i_col_elt = get_col(df_elt_raw, 'Item Type')
+i_col_etl = get_col(df_fact_raw, 'Item Type')
+
+if i_col_elt:
+    all_items = sorted(df_elt_raw[i_col_elt].dropna().astype(str).unique())
+elif i_col_etl:
+    all_items = sorted(df_fact_raw[i_col_etl].dropna().astype(str).unique())
+else:
+    all_items = []
+
+selected_items = st.sidebar.multiselect(
+    "Select Item Types", options=all_items, default=all_items
+)
+
+# ===== SALES CHANNEL FILTER =====
+c_col_elt = get_col(df_elt_raw, 'Sales Channel')
+c_col_etl = get_col(df_fact_raw, 'Sales Channel')
+
+if c_col_elt:
+    all_channels = sorted(df_elt_raw[c_col_elt].dropna().astype(str).unique())
+elif c_col_etl:
+    all_channels = sorted(df_fact_raw[c_col_etl].dropna().astype(str).unique())
+else:
+    all_channels = []
+
+selected_channels = st.sidebar.multiselect(
+    "Sales Channel", options=all_channels, default=all_channels
+)
 
 # --- FILTERING ---
 def apply_filters(df):
-    if df.empty: return df
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        return pd.DataFrame()
+
     d_col = get_col(df, 'Order Date')
     r_col = get_col(df, 'Region')
     i_col = get_col(df, 'Item Type')
     c_col = get_col(df, 'Sales Channel')
-    
-    mask = pd.Series([True] * len(df))
-    if d_col and len(selected_range) == 2:
+
+    mask = pd.Series(True, index=df.index)
+
+    # DATE FILTER
+    if d_col and selected_range[0] and selected_range[1]:
         df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
-        mask &= (df[d_col].dt.date >= selected_range[0]) & (df[d_col].dt.date <= selected_range[1])
-    if r_col:
+        start = pd.to_datetime(selected_range[0])
+        end = pd.to_datetime(selected_range[1])
+        mask &= df[d_col].between(start, end)
+
+    if r_col and selected_regions:
         mask &= df[r_col].isin(selected_regions)
-    if i_col:
+
+    if i_col and selected_items:
         mask &= df[i_col].isin(selected_items)
-    if c_col:
+
+    if c_col and selected_channels:
         mask &= df[c_col].isin(selected_channels)
-    return df[mask]
+
+    return df.loc[mask].copy()
+
+
+
 
 f_df_elt = apply_filters(df_elt_raw)
 f_df_etl = apply_filters(df_fact_raw)
