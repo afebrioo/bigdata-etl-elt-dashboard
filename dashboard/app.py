@@ -241,17 +241,28 @@ def render_content(df, pipeline_name):
 
     main_color = "#FF4B4B" if pipeline_name == "ELT" else "#0083B0"
 
-    # Map columns
-    rev_col = get_col(df, 'Total Revenue')
-    prof_col = get_col(df, 'Total Profit')
-    units_col = get_col(df, 'Units Sold')
-    date_col = get_col(df, 'Order Date')
-    reg_col = get_col(df, 'Region')
-    chan_col = get_col(df, 'Sales Channel')
+    # === DEBUGGING: Show actual columns ===
+    with st.expander("🔍 Debug: View Available Columns"):
+        st.write("**Columns in your CSV:**")
+        st.code(", ".join(df.columns.tolist()))
+        st.write("**Column data types:**")
+        st.write(df.dtypes)
+
+    # Map columns - try multiple variations
+    rev_col = get_col(df, 'Total Revenue') or get_col(df, 'Revenue') or get_col(df, 'total_revenue')
+    prof_col = get_col(df, 'Total Profit') or get_col(df, 'Profit') or get_col(df, 'total_profit')
+    units_col = get_col(df, 'Units Sold') or get_col(df, 'Units') or get_col(df, 'units_sold') or get_col(df, 'Quantity')
+    date_col = get_col(df, 'Order Date') or get_col(df, 'Date') or get_col(df, 'order_date')
+    reg_col = get_col(df, 'Region') or get_col(df, 'region')
+    chan_col = get_col(df, 'Sales Channel') or get_col(df, 'Channel') or get_col(df, 'sales_channel')
 
     # Check critical columns
     if not rev_col or not prof_col or not units_col:
-        st.error(f"❌ Critical columns missing! Available columns: {list(df.columns)}")
+        st.error(f"❌ Critical columns missing!")
+        st.write("**Looking for:** Total Revenue, Total Profit, Units Sold")
+        st.write(f"**Found:** Revenue={rev_col}, Profit={prof_col}, Units={units_col}")
+        st.write("**Available columns:**")
+        st.code(", ".join(df.columns.tolist()))
         return
 
     # === 1. KPI METRICS ===
