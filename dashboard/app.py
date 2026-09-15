@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine
 import altair as alt
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- PRE-CONFIG ---
 st.set_page_config(
@@ -12,11 +15,9 @@ st.set_page_config(
 
 # --- HELPER: ROBUST COLUMN ACCESS ---
 def get_col(df, target_name):
-    """
-    Searches for a column name in a case-insensitive and space-insensitive way.
-    Example: 'Total Revenue' will match 'total_revenue', 'totalrevenue', 'Total Revenue', etc.
-    """
-    if df.empty: return None
+    """Cari kolom dengan normalisasi nama (case-insensitive, ignore spaces/underscores)"""
+    if df is None or df.empty:
+        return None
     target_clean = target_name.lower().replace(" ", "").replace("_", "")
     for col in df.columns:
         col_clean = str(col).lower().replace(" ", "").replace("_", "")
@@ -28,277 +29,419 @@ def get_col(df, target_name):
 # --- DATABASE CONNECTION ---
 @st.cache_resource
 def get_engine(db_name='elt_sales_db'):
+    """Create database engine (only works locally)"""
     return create_engine(f'mysql+pymysql://root:@localhost/{db_name}')
+
 
 @st.cache_data
 def load_elt_data():
-    # 1️⃣ Coba DB (LOCAL)
+    """Load ELT data from database or CSV fallback"""
     try:
+        # Try local database connection
         engine = get_engine('elt_sales_db')
         df = pd.read_sql("SELECT * FROM sales_processed", engine)
+        d_col = get_col(df, 'Order Date')
+        if d_col:
+            df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
         return df
-    except:
-        # 2️⃣ Fallback ke CSV (CLOUD)
+    except Exception as db_error:
+        # Fallback to CSV (for GitHub deployment)
         try:
-            df = pd.read_csv("data/sales_processed.csv")
+            csv_path = os.path.join(BASE_DIR, "data", "sales_processed.csv")
+            df = pd.read_csv(csv_path)
             d_col = get_col(df, 'Order Date')
             if d_col:
                 df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
             return df
-        except Exception as e:
-            st.error(f"ELT load error (DB & CSV): {e}")
+        except Exception as csv_error:
+            st.warning(f"ELT data not found. DB Error: {db_error}. CSV Error: {csv_error}")
             return pd.DataFrame()
 
 
 @st.cache_data
 def load_etl_data():
-    engine = get_engine('dw_sales')
-    # Star Schema needs joins to get descriptors
-    query = """
-    SELECT 
-        f.*, 
-        d.order_date,
-        c.region, c.country,
-        i.item_type,
-        ch.sales_channel
-    FROM fact_sales f
-    LEFT JOIN dim_date d ON f.date_id = d.date_id
-    LEFT JOIN dim_country c ON f.country_id = c.country_id
-    LEFT JOIN dim_item i ON f.item_id = i.item_id
-    LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id
-    """
+    """Load ETL data from database or CSV fallback"""
     try:
+        # Try database with JOIN query
+        engine = get_engine('dw_sales')
+        query = """
+        SELECT 
+            f.sales_id, f.order_id, f.units_sold, f.unit_price, f.unit_cost,
+            f.total_revenue, f.total_cost, f.total_profit, 
+            f.profit_per_unit, f.revenue_per_unit, f.profit_margin_ratio,
+            d.order_date, 
+            c.region, c.country, 
+            i.item_type, 
+            ch.sales_channel
+        FROM fact_sales f 
+        LEFT JOIN dim_date d ON f.date_id = d.date_id 
+        LEFT JOIN dim_country c ON f.country_id = c.country_id 
+        LEFT JOIN dim_item i ON f.item_id = i.item_id 
+        LEFT JOIN dim_channel ch ON f.channel_id = ch.channel_id
+        """
         df = pd.read_sql(query, engine)
-        if 'order_date' in df.columns:
-            df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+        d_col = get_col(df, 'order_date')
+        if d_col:
+            df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
         return df
-    except:
-        # Fallback to fact table only if joins fail
+    except Exception as db_error:
+        # Fallback to CSV - try joined version first
         try:
-            return pd.read_sql("SELECT * FROM fact_sales", engine)
-        except:
-            return pd.DataFrame()
+            csv_path = os.path.join(BASE_DIR, "data", "fact_sales_joined.csv")
+            df = pd.read_csv(csv_path)
+            # Verify it has data
+            if df.empty or len(df.columns) == 0:
+                raise ValueError("Joined CSV is empty")
+            d_col = get_col(df, 'order_date')
+            if d_col:
+                df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
+            st.success("✅ ETL data loaded from fact_sales_joined.csv")
+            return df
+        except Exception as joined_error:
+            # ALTERNATIVE: Try to manually join dimension tables from separate CSVs
+            try:
+                fact_path = os.path.join(BASE_DIR, "data", "fact_sales.csv")
+                df_fact = pd.read_csv(fact_path)
+                
+                # Try loading dimension tables if they exist
+                dim_tables = {}
+                for dim_name, dim_file in [
+                    ('date', 'dim_date.csv'),
+                    ('country', 'dim_country.csv'),
+                    ('item', 'dim_item.csv'),
+                    ('channel', 'dim_channel.csv')
+                ]:
+                    try:
+                        dim_path = os.path.join(BASE_DIR, "data", dim_file)
+                        dim_tables[dim_name] = pd.read_csv(dim_path)
+                    except:
+                        pass
+                
+                # Perform joins if dimension tables are available
+                if dim_tables:
+                    if 'date' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['date'][['date_id', 'order_date']], 
+                            on='date_id', how='left'
+                        )
+                    if 'country' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['country'][['country_id', 'region', 'country']], 
+                            on='country_id', how='left'
+                        )
+                    if 'item' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['item'][['item_id', 'item_type']], 
+                            on='item_id', how='left'
+                        )
+                    if 'channel' in dim_tables:
+                        df_fact = df_fact.merge(
+                            dim_tables['channel'][['channel_id', 'sales_channel']], 
+                            on='channel_id', how='left'
+                        )
+                    st.info("✅ ETL data joined from separate dimension tables")
+                    d_col = get_col(df_fact, 'order_date')
+                    if d_col:
+                        df_fact[d_col] = pd.to_datetime(df_fact[d_col], errors='coerce')
+                    return df_fact
+                else:
+                    # No dimension tables available
+                    st.warning("⚠️ ETL data loaded without dimensions. Charts will be limited.")
+                    st.info("💡 To fix: Export joined data or add dimension CSV files (dim_date.csv, dim_country.csv, etc.)")
+                    return df_fact
+                    
+            except Exception as csv_error:
+                st.error(f"❌ No ETL data found!")
+                st.write("Tried:")
+                st.write(f"- Database: {str(db_error)[:100]}")
+                st.write(f"- Joined CSV: {str(joined_error)[:100]}")
+                st.write(f"- Fact CSV: {str(csv_error)[:100]}")
+                return pd.DataFrame()
 
-# --- LOADING DATA ---
+
+# --- LOAD DATA ---
 df_elt_raw = load_elt_data()
 df_fact_raw = load_etl_data()
 
+# Check if any data loaded
 if df_elt_raw.empty and df_fact_raw.empty:
-    st.error("No data found. Please run your ETL/ELT pipelines first.")
+    st.error("❌ No data found. Please ensure CSV files exist in `/data/` folder:")
+    st.code("data/sales_processed.csv\ndata/fact_sales.csv")
     st.stop()
 
-# --- SIDEBAR: GLOBAL FILTERS ---
+# --- NORMALIZE ETL COLUMNS (ensure consistent naming) ---
+if not df_fact_raw.empty:
+    mapping = {}
+    for target_name in ['Order Date', 'Region', 'Sales Channel', 'Item Type']:
+        found_col = get_col(df_fact_raw, target_name)
+        if found_col and found_col != target_name:
+            mapping[found_col] = target_name
+    if mapping:
+        df_fact_raw = df_fact_raw.rename(columns=mapping)
+
 # --- SIDEBAR: GLOBAL FILTERS ---
 st.sidebar.header("🔍 Global Filters")
 
 # ===== DATE FILTER =====
 all_dates = []
-for d_df in [df_elt_raw, df_fact_raw]:
-    if d_df is not None and not d_df.empty:
-        dc = get_col(d_df, 'Order Date')
-        if dc:
-            all_dates.extend(pd.to_datetime(d_df[dc], errors='coerce').dropna().tolist())
+for df_source in [df_elt_raw, df_fact_raw]:
+    if not df_source.empty:
+        date_col = get_col(df_source, 'Order Date')
+        if date_col:
+            dates = pd.to_datetime(df_source[date_col], errors='coerce').dropna()
+            all_dates.extend(dates.tolist())
 
 if all_dates:
-    min_date, max_date = min(all_dates), max(all_dates)
+    min_date = min(all_dates)
+    max_date = max(all_dates)
     selected_range = st.sidebar.date_input(
-        "Select Date Horizon",
-        [min_date.date(), max_date.date()]
+        "📅 Select Date Range",
+        [min_date.date(), max_date.date()],
+        min_value=min_date.date(),
+        max_value=max_date.date()
     )
+    # Ensure we have both start and end dates
+    if len(selected_range) != 2:
+        selected_range = [min_date.date(), max_date.date()]
 else:
     selected_range = [None, None]
 
 # ===== REGION FILTER =====
-r_col_elt = get_col(df_elt_raw, 'Region')
-r_col_etl = get_col(df_fact_raw, 'Region')
-
-if r_col_elt:
-    all_regions = sorted(df_elt_raw[r_col_elt].dropna().astype(str).unique())
-elif r_col_etl:
-    all_regions = sorted(df_fact_raw[r_col_etl].dropna().astype(str).unique())
-else:
-    all_regions = []
+all_regions = []
+for df_source in [df_elt_raw, df_fact_raw]:
+    if not df_source.empty:
+        reg_col = get_col(df_source, 'Region')
+        if reg_col:
+            all_regions.extend(df_source[reg_col].dropna().astype(str).unique().tolist())
+all_regions = sorted(set(all_regions)) if all_regions else []
 
 selected_regions = st.sidebar.multiselect(
-    "Select Regions", options=all_regions, default=all_regions
+    "🌍 Regions",
+    options=all_regions,
+    default=all_regions
 )
 
 # ===== ITEM TYPE FILTER =====
-i_col_elt = get_col(df_elt_raw, 'Item Type')
-i_col_etl = get_col(df_fact_raw, 'Item Type')
-
-if i_col_elt:
-    all_items = sorted(df_elt_raw[i_col_elt].dropna().astype(str).unique())
-elif i_col_etl:
-    all_items = sorted(df_fact_raw[i_col_etl].dropna().astype(str).unique())
-else:
-    all_items = []
+all_items = []
+for df_source in [df_elt_raw, df_fact_raw]:
+    if not df_source.empty:
+        item_col = get_col(df_source, 'Item Type')
+        if item_col:
+            all_items.extend(df_source[item_col].dropna().astype(str).unique().tolist())
+all_items = sorted(set(all_items)) if all_items else []
 
 selected_items = st.sidebar.multiselect(
-    "Select Item Types", options=all_items, default=all_items
+    "📦 Item Types",
+    options=all_items,
+    default=all_items
 )
 
 # ===== SALES CHANNEL FILTER =====
-c_col_elt = get_col(df_elt_raw, 'Sales Channel')
-c_col_etl = get_col(df_fact_raw, 'Sales Channel')
-
-if c_col_elt:
-    all_channels = sorted(df_elt_raw[c_col_elt].dropna().astype(str).unique())
-elif c_col_etl:
-    all_channels = sorted(df_fact_raw[c_col_etl].dropna().astype(str).unique())
-else:
-    all_channels = []
+all_channels = []
+for df_source in [df_elt_raw, df_fact_raw]:
+    if not df_source.empty:
+        chan_col = get_col(df_source, 'Sales Channel')
+        if chan_col:
+            all_channels.extend(df_source[chan_col].dropna().astype(str).unique().tolist())
+all_channels = sorted(set(all_channels)) if all_channels else []
 
 selected_channels = st.sidebar.multiselect(
-    "Sales Channel", options=all_channels, default=all_channels
+    "🛒 Sales Channels",
+    options=all_channels,
+    default=all_channels
 )
 
-# --- FILTERING ---
+
+# --- FILTERING FUNCTION ---
 def apply_filters(df):
-    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+    """Apply all sidebar filters to dataframe"""
+    if df is None or df.empty:
         return pd.DataFrame()
 
-    d_col = get_col(df, 'Order Date')
-    r_col = get_col(df, 'Region')
-    i_col = get_col(df, 'Item Type')
-    c_col = get_col(df, 'Sales Channel')
+    # Get column names
+    date_col = get_col(df, 'Order Date')
+    reg_col = get_col(df, 'Region')
+    item_col = get_col(df, 'Item Type')
+    chan_col = get_col(df, 'Sales Channel')
 
+    # Start with all rows selected
     mask = pd.Series(True, index=df.index)
 
-    # DATE FILTER
-    if d_col and selected_range[0] and selected_range[1]:
-        df[d_col] = pd.to_datetime(df[d_col], errors='coerce')
+    # Apply date filter
+    if date_col and selected_range[0] and selected_range[1]:
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
         start = pd.to_datetime(selected_range[0])
-        end = pd.to_datetime(selected_range[1])
-        mask &= df[d_col].between(start, end)
+        end = pd.to_datetime(selected_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        mask &= df[date_col].between(start, end)
 
-    if r_col and selected_regions:
-        mask &= df[r_col].isin(selected_regions)
+    # Apply region filter
+    if reg_col and selected_regions:
+        mask &= df[reg_col].isin(selected_regions)
 
-    if i_col and selected_items:
-        mask &= df[i_col].isin(selected_items)
+    # Apply item type filter
+    if item_col and selected_items:
+        mask &= df[item_col].isin(selected_items)
 
-    if c_col and selected_channels:
-        mask &= df[c_col].isin(selected_channels)
+    # Apply channel filter
+    if chan_col and selected_channels:
+        mask &= df[chan_col].isin(selected_channels)
 
     return df.loc[mask].copy()
 
 
-
-
+# Apply filters to both datasets
 f_df_elt = apply_filters(df_elt_raw)
 f_df_etl = apply_filters(df_fact_raw)
 
 # --- MAIN UI ---
 st.title("🏆 Sales Intelligence Dashboard")
-st.markdown("Dashboard untuk Implementasi Pipeline Big Data ETL dan ELT pada Studi Kasus Catatan Penjualan dengan Interactive Filters.")
+st.markdown("Dashboard Implementasi Pipeline Big Data ETL dan ELT - Interactive Analytics")
+
 tab1, tab2 = st.tabs(["🔴 ELT View (Warehouse)", "🔵 ETL View (Star Schema)"])
 
-def render_content(df, p_name):
-    if df.empty:
-        st.warning(f"No data for {p_name} pipeline. Ensure filters are not too restrictive.")
+
+def render_content(df, pipeline_name):
+    """Render dashboard content for a given pipeline"""
+    if df is None or df.empty:
+        st.warning(f"⚠️ No data available for {pipeline_name} pipeline after applying filters.")
+        st.info("Try adjusting the filters in the sidebar or check if data files exist.")
         return
 
-    # Column Mapping
-    rev = get_col(df, 'Total Revenue')
-    prof = get_col(df, 'Total Profit')
-    units = get_col(df, 'Units Sold')
-    date_c = get_col(df, 'Order Date')
-    item_c = get_col(df, 'Item Type')
-    reg_c = get_col(df, 'Region')
-    chan_c = get_col(df, 'Sales Channel')
-    prio_c = get_col(df, 'Order Priority')
+    main_color = "#FF4B4B" if pipeline_name == "ELT" else "#0083B0"
 
-    if not rev or not prof or not units:
-        st.error(f"Critical columns for {p_name} viz not found.")
+    # Map columns to exact CSV structure
+    # Your CSV uses lowercase with underscores
+    rev_col = get_col(df, 'total_revenue')
+    prof_col = get_col(df, 'total_profit')
+    units_col = get_col(df, 'units_sold')
+    date_col = get_col(df, 'order_date') or get_col(df, 'date_id')
+    reg_col = get_col(df, 'region')
+    chan_col = get_col(df, 'sales_channel') or get_col(df, 'channel_id')
+    country_col = get_col(df, 'country')
+    item_col = get_col(df, 'item_type')
+
+    # Check critical columns
+    if not rev_col or not prof_col or not units_col:
+        st.error(f"❌ Critical columns missing!")
+        st.write(f"**Looking for:** total_revenue, total_profit, units_sold")
+        st.write(f"**Found:** Revenue={rev_col}, Profit={prof_col}, Units={units_col}")
+        with st.expander("🔍 Debug: Available Columns"):
+            st.code(", ".join(df.columns.tolist()))
         return
 
-    # 1. KPI UTAMA
-    st.subheader("1. KPI Utama")
-    k1, k2, k3, k4 = st.columns(4)
-    t_rev = df[rev].sum()
-    t_prof = df[prof].sum()
-    t_units = df[units].sum()
-    k1.metric("Total Revenue", f"${t_rev:,.0f}")
-    k2.metric("Total Profit", f"${t_prof:,.0f}")
-    k3.metric("Units Sold", f"{t_units:,.0f}")
-    k4.metric("Profit Margin", f"{(t_prof/t_rev*100):.1f}%" if t_rev != 0 else "0%")
-
-    st.markdown("---")
-
-    # 2. TREN WAKTU
-    st.subheader("2. Tren Waktu")
-    if date_c:
-        trend = df.groupby(pd.Grouper(key=date_c, freq='M'))[prof].sum().reset_index()
-        m_color = "#FF4B4B" if p_name == "ELT" else "#0083B0"
-        chart_trend = alt.Chart(trend).mark_area(
-            color=m_color, opacity=0.4, line={'color': m_color}
-        ).encode(
-            x=alt.X(f'{date_c}:T', title="Month"),
-            y=alt.Y(f'{prof}:Q', title="Monthly Profit")
-        ).properties(height=300)
-        st.altair_chart(chart_trend, use_container_width=True)
-
-    st.markdown("---")
-
-    # 3. DISTRIBUSI & 4. PERBANDINGAN
-    col_dist, col_comp = st.columns(2)
+    # === 1. KPI METRICS ===
+    st.subheader("📊 Key Performance Indicators")
+    col1, col2, col3, col4 = st.columns(4)
     
-    with col_dist:
-        st.subheader("3. Distribusi")
-        # Profit Distribution (Histogram)
-        st.write("**Profit Distribution (Histogram)**")
-        dist_chart = alt.Chart(df).mark_bar(color=m_color).encode(
-            alt.X(f"{prof}:Q", bin=True, title="Profit Bins"),
-            y='count()',
-        ).properties(height=300)
-        st.altair_chart(dist_chart, use_container_width=True)
+    total_revenue = df[rev_col].fillna(0).sum()
+    total_profit = df[prof_col].fillna(0).sum()
+    total_units = df[units_col].fillna(0).sum()
+    profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
+    
+    col1.metric("💰 Total Revenue", f"${total_revenue:,.0f}")
+    col2.metric("📈 Total Profit", f"${total_profit:,.0f}")
+    col3.metric("📦 Units Sold", f"{total_units:,.0f}")
+    col4.metric("💹 Profit Margin", f"{profit_margin:.1f}%")
+
+    st.markdown("---")
+
+    # === 2. TIME TREND ===
+    st.subheader("📅 Profit Trend Over Time")
+    if date_col and date_col in df.columns:
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        df_trend = df.dropna(subset=[date_col, prof_col])
         
-        # Order Priority (Pie)
-        if prio_c:
-            st.write("**Order Priority (Pie)**")
-            prio_data = df[prio_c].value_counts().reset_index()
-            prio_data.columns = ['Priority', 'Count']
-            chart_prio = alt.Chart(prio_data).mark_arc().encode(
-                theta=alt.Theta(field="Count", type="quantitative"),
-                color=alt.Color(field="Priority", type="nominal"),
-                tooltip=['Priority', 'Count']
-            ).properties(height=300)
-            st.altair_chart(chart_prio, use_container_width=True)
-
-    with col_comp:
-        st.subheader("4. Perbandingan")
-        # Sales Channel Performance
-        if chan_c:
-            st.write("**Online vs Offline Performance**")
-            chan_data = df.groupby(chan_c)[prof].sum().reset_index()
-            chart_chan = alt.Chart(chan_data).mark_bar().encode(
-                x=alt.X(f'{chan_c}:N', title="Sales Channel"),
-                y=alt.Y(f'{prof}:Q', title="Total Profit"),
-                color=alt.Color(f'{chan_c}:N', legend=None),
-                tooltip=[chan_c, prof]
-            ).properties(height=300)
-            st.altair_chart(chart_chan, use_container_width=True)
+        if not df_trend.empty:
+            try:
+                trend_data = df_trend.groupby(pd.Grouper(key=date_col, freq='ME'))[prof_col].sum().reset_index()
+            except ValueError:
+                trend_data = df_trend.groupby(pd.Grouper(key=date_col, freq='M'))[prof_col].sum().reset_index()
             
-        # Regional Comparison
-        if reg_c:
-            st.write("**Regional Profit Contribution**")
-            reg_data = df.groupby(reg_c)[prof].sum().reset_index()
-            chart_reg = alt.Chart(reg_data).mark_bar().encode(
-                x=alt.X(f'{prof}:Q', title="Revenue"),
-                y=alt.Y(f'{reg_c}:N', sort='-x', title="Region"),
-                color=alt.Color(f'{reg_c}:N', legend=None),
-                tooltip=[reg_c, prof]
+            chart_trend = alt.Chart(trend_data).mark_area(
+                color=main_color,
+                opacity=0.4,
+                line={'color': main_color}
+            ).encode(
+                x=alt.X(f'{date_col}:T', title='Month'),
+                y=alt.Y(f'{prof_col}:Q', title='Monthly Profit ($)'),
+                tooltip=[
+                    alt.Tooltip(f'{date_col}:T', title='Month', format='%b %Y'),
+                    alt.Tooltip(f'{prof_col}:Q', title='Profit', format='$,.0f')
+                ]
+            ).properties(height=350)
+            
+            st.altair_chart(chart_trend, use_container_width=True)
+        else:
+            st.info("No valid date data available for trend analysis.")
+    else:
+        st.warning("⚠️ Date column not found. For ETL data, export with JOIN to include 'order_date'.")
+        st.code("SELECT f.*, d.order_date FROM fact_sales f LEFT JOIN dim_date d ON f.date_id = d.date_id")
+
+    st.markdown("---")
+
+    # === 3. DISTRIBUTION & COMPARISON ===
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.subheader("📊 Profit Distribution")
+        hist_chart = alt.Chart(df).mark_bar(color=main_color).encode(
+            x=alt.X(f"{prof_col}:Q", bin=alt.Bin(maxbins=30), title="Profit Range"),
+            y=alt.Y('count()', title='Frequency'),
+            tooltip=['count()']
+        ).properties(height=300)
+        st.altair_chart(hist_chart, use_container_width=True)
+
+    with col_right:
+        st.subheader("🛒 Sales Channel Performance")
+        if chan_col and chan_col in df.columns:
+            channel_data = df.groupby(chan_col)[prof_col].sum().reset_index()
+            
+            channel_chart = alt.Chart(channel_data).mark_bar().encode(
+                x=alt.X(f'{chan_col}:N', title='Channel', axis=alt.Axis(labelAngle=0)),
+                y=alt.Y(f'{prof_col}:Q', title='Total Profit ($)'),
+                color=alt.Color(f'{chan_col}:N', legend=None),
+                tooltip=[
+                    alt.Tooltip(f'{chan_col}:N', title='Channel'),
+                    alt.Tooltip(f'{prof_col}:Q', title='Profit', format='$,.0f')
+                ]
             ).properties(height=300)
-            st.altair_chart(chart_reg, use_container_width=True)
+            
+            st.altair_chart(channel_chart, use_container_width=True)
+        else:
+            st.warning("⚠️ Sales Channel not available. For ETL, export with JOIN to include 'sales_channel'.")
 
-    # 5. EXPLORER
-    with st.expander("📄 Data Explorer & Raw Records"):
-        st.write(f"Showing top 100 rows filtered for {p_name} pipeline.")
+    # === 4. REGIONAL ANALYSIS ===
+    st.subheader("🌍 Regional Performance")
+    if reg_col and reg_col in df.columns:
+        region_data = df.groupby(reg_col)[prof_col].sum().reset_index().sort_values(prof_col, ascending=False)
+        
+        region_chart = alt.Chart(region_data).mark_bar().encode(
+            x=alt.X(f'{prof_col}:Q', title='Total Profit ($)'),
+            y=alt.Y(f'{reg_col}:N', sort='-x', title='Region'),
+            color=alt.Color(f'{reg_col}:N', legend=None),
+            tooltip=[
+                alt.Tooltip(f'{reg_col}:N', title='Region'),
+                alt.Tooltip(f'{prof_col}:Q', title='Profit', format='$,.0f')
+            ]
+        ).properties(height=300)
+        
+        st.altair_chart(region_chart, use_container_width=True)
+    else:
+        st.warning("⚠️ Region not available. For ETL, export with JOIN to include 'region'.")
+
+    # === 5. DATA EXPLORER ===
+    with st.expander("📄 View Raw Data (Top 100 Rows)"):
         st.dataframe(df.head(100), use_container_width=True)
+        st.caption(f"Showing {min(100, len(df))} of {len(df):,} total rows")
 
-with tab1: render_content(f_df_elt, "ELT")
-with tab2: render_content(f_df_etl, "ETL")
 
+# Render both tabs
+with tab1:
+    render_content(f_df_elt, "ELT")
+
+with tab2:
+    render_content(f_df_etl, "ETL")
+
+# Footer
 st.markdown("---")
-st.caption("Kelompok 7 Tubes Big Data | Requirements: KPI, Trend, Distribusi, Perbandingan, Filter")
+st.caption("🎓 Kelompok 7 - Tugas Besar Big Data | Dashboard Requirements: KPI, Trend, Distribution, Comparison, Interactive Filters")
